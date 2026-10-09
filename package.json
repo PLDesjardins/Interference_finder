@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview --host 0.0.0.0",
     "test": "node --test tests/*.test.js",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "build:standalone": "vite build --mode standalone"
   },
   "dependencies": {
     "@fontsource/dm-sans": "^5.3.0",
@@ -19,6 +20,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.56.0",
-    "vite": "^7.1.0"
+    "vite": "^7.1.0",
+    "vite-plugin-singlefile": "^2.3.3"
   }
 }

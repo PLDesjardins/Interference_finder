@@ -2,7 +2,19 @@
 
 A browser-based PCSWMM conduit crossing checker with a signed-clearance report and interactive 3D viewer. Shapefiles are processed on the device; no backend or credentials are required. Fonts and libraries are bundled locally.
 
-## Run
+## Open without installing anything
+
+Download the self-contained **[standalone/index.html](https://github.com/PLDesjardins/Interference_finder/blob/main/standalone/index.html)** file. On its GitHub file page, click **Download raw file** (the download icon at the upper right of the file). Save it with the `.html` extension, then double-click it to open in Edge, Chrome, or Firefox. It needs no Node.js, installation, server, or Internet connection after download. Import the same conduit files or choose the sample network. WebGL is required for 3D.
+
+If your company blocks local HTML files, the same app can run as a hosted website. A GitHub Pages deployment workflow is included:
+
+1. In this repository, open **Settings → Pages** and select **GitHub Actions** as the source.
+2. Open **Actions → Publish web app → Run workflow** on `main` (or rerun the latest workflow).
+3. After the deployment succeeds, open `https://pldesjardins.github.io/Interference_finder/`.
+
+Pages must be enabled by a repository administrator. GitHub Pages availability depends on the repository visibility and GitHub plan. This URL is the deployment target; adding the workflow alone does not activate the site. For a private repository, review the Pages visibility setting before enabling it. Conduit files are still processed in the browser rather than uploaded.
+
+## Develop locally (optional)
 
 Requires Node.js 20.19+ or 22.12+ (validated with Node 24).
 
@@ -11,7 +23,7 @@ npm ci
 npm run dev
 ```
 
-Open the address printed by Vite in your browser. For deployment, run `npm run build` and serve the `dist/` directory with any static web host. This is an HTML web application; serve it over HTTP instead of opening `index.html` directly with `file://`.
+Open the address printed by Vite in your browser. For deployment, run `npm run build` and serve the `dist/` directory with any static web host. This is an HTML web application; serve its `dist/` build over HTTP. The separately generated `standalone/index.html` can be opened directly with `file://`.
 
 ## Use
 
@@ -38,9 +50,14 @@ Open the address printed by Vite in your browser. For deployment, run `npm run b
 ```sh
 npm test
 npm run build
+npm run build:standalone
 npm run test:browser
 ```
 
 The nine calculation tests exercise interpolation, signed clearance, thresholds, deduplication, endpoints, overlaps, invalid values, unit conversion, wall thickness, reversed geometry, and CSV encoding. Browser tests import generated standards-compliant SHP/DBF fixtures (zipped and loose), check expected clash results, reject geographic coordinates and missing attributes, exercise the demo/filter/focus/export/reanalysis flow, and check mobile layout.
 
 Browser tests use `/usr/bin/chromium` when installed, otherwise Playwright's Chromium. Install the latter with `npx playwright install chromium` if needed. The 3D viewer requires WebGL; report calculations and CSV export remain usable when WebGL is unavailable.
+
+## Maintain the downloadable version
+
+After changing application code, run `npm run build:standalone` and commit the refreshed `standalone/index.html` along with the source. The generated file deliberately includes all JavaScript, CSS, libraries, and fonts so company users do not need a package manager or local server. GitHub Pages builds this file afresh for each deployment. Browser tests load the exact standalone HTML into an isolated document with network access disabled (the managed test browser blocks `file://` navigation). Direct local-file opening remains subject to company browser policy.
