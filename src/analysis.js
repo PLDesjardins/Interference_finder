@@ -1,17 +1,22 @@
 /** Engineering calculations use projected XY coordinates and metres internally. */
 const EPS = 1e-9;
 export const units = { m: 1, ft: 0.3048, mm: 0.001 };
+export function pipeShape(value) {
+  return { CIRCULAR: 'circular', RECT_CLOSED: 'rectangular' }[String(value ?? '').trim().toUpperCase()] ?? null;
+}
 export function makePipes(features, mapping, settings) {
   const pipes = [], errors = [];
   const number = value => value === null || value === undefined || String(value).trim() === '' ? NaN : Number(value);
   features.forEach((feature, index) => {
     const p = feature.properties || {}, label = String(p[mapping.id] ?? `Pipe ${index + 1}`);
+    const shape = pipeShape(p[mapping.shape]);
+    if (!shape) { errors.push(`${label}: unsupported or missing pipe geometry (${String(p[mapping.shape] ?? 'blank')}). Expected CIRCULAR or RECT_CLOSED.`); return; }
     if (feature.geometry?.type !== 'LineString') { errors.push(`${label}: only continuous LineString conduits are supported.`); return; }
     let points = feature.geometry.coordinates.map(c => [number(c[0]) * units[settings.xyUnit], number(c[1]) * units[settings.xyUnit]]);
     if (settings.reverse) points.reverse();
     const up = number(p[mapping.up]) * units[settings.zUnit], down = number(p[mapping.down]) * units[settings.zUnit];
     const height = number(p[mapping.height]) * units[settings.sizeUnit];
-    const width = settings.shape === 'rectangular' ? number(p[mapping.width]) * units[settings.sizeUnit] : height;
+    const width = shape === 'rectangular' ? number(p[mapping.width]) * units[settings.sizeUnit] : height;
     if (!Number.isFinite(up) || !Number.isFinite(down) || !Number.isFinite(height) || height <= 0 || !Number.isFinite(width) || width <= 0 || points.some(c => !c.every(Number.isFinite))) {
       errors.push(`${label}: missing or invalid elevation, size, or coordinates.`); return;
     }
@@ -19,7 +24,7 @@ export function makePipes(features, mapping, settings) {
     for (let i = 1; i < points.length; i++) distances.push(distances[i - 1] + Math.hypot(points[i][0] - points[i - 1][0], points[i][1] - points[i - 1][1]));
     const length = distances.at(-1);
     if (!length || points.length < 2) { errors.push(`${label}: zero-length geometry.`); return; }
-    pipes.push({ key: index, id: label, points, distances, length, up, down, height, width, wall: settings.wall, shape: settings.shape, reference: settings.reference });
+    pipes.push({ key: index, id: label, points, distances, length, up, down, height, width, wall: settings.wall, shape, reference: settings.reference });
   });
   return { pipes, errors };
 }

@@ -6,7 +6,7 @@ import '@fontsource/manrope/latin-600.css';
 import '@fontsource/manrope/latin-700.css';
 import '@fontsource/manrope/latin-800.css';
 import './style.css';
-import { makePipes, analyze, csv, units } from './analysis.js';
+import { makePipes, analyze, csv, units, pipeShape } from './analysis.js';
 import { readConduits } from './import.js';
 import { demo } from './demo.js';
 import { createViewer } from './viewer.js';
@@ -50,9 +50,10 @@ document.querySelector('#app').innerHTML = `
         <label class="full">Conduit ID<select id="map-id" disabled><option>Choose a field</option></select></label>
         <label>Upstream invert<select id="map-up" disabled><option>Choose a field</option></select></label>
         <label>Downstream invert<select id="map-down" disabled><option>Choose a field</option></select></label>
-        <label class="full">Pipe geometry<select id="shape"><option value="circular">Circular</option><option value="rectangular">Rectangular (box pipe)</option></select></label>
+        <label class="full">Pipe geometry attribute<select id="map-shape" disabled><option value="">Choose a field</option></select></label>
+        <p id="geometry-info" class="help full" style="margin:0">CIRCULAR → circular · RECT_CLOSED → box pipe</p>
         <label id="height-label" class="full"><span id="height-caption">Pipe diameter</span><select id="map-height" disabled><option>Choose a field</option></select></label>
-        <label id="width-label" hidden>Pipe width<select id="map-width" disabled><option value="">Choose a field</option></select></label>
+        <label id="width-label" hidden>Pipe width <span class="optional">box pipes only</span><select id="map-width" disabled><option value="">Choose a field</option></select></label>
       </div>
       <details class="advanced"><summary>Geometry & units <span>Metres · inverts</span></summary><div class="form-grid">
         <label>XY units<select id="xy-unit"><option value="m">Metres</option><option value="ft">Feet</option></select></label>
@@ -84,28 +85,34 @@ const $ = id => document.getElementById(id);
 const viewer = createViewer($('viewer'), selectCrossing);
 let filter = 'all';
 function settings() {
-  return { xyUnit: $('xy-unit').value, zUnit: $('z-unit').value, sizeUnit: $('size-unit').value, reference: $('reference').value, shape: $('shape').value, wall: Number($('wall').value), reverse: $('reverse').checked, endpoints: $('endpoints').checked, minimum: Number($('minimum').value) };
+  return { xyUnit: $('xy-unit').value, zUnit: $('z-unit').value, sizeUnit: $('size-unit').value, reference: $('reference').value, wall: Number($('wall').value), reverse: $('reverse').checked, endpoints: $('endpoints').checked, minimum: Number($('minimum').value) };
 }
-function mapping() { return Object.fromEntries(['id','up','down','height','width'].map(k => [k, $('map-' + k).value])); }
+function mapping() { return Object.fromEntries(['id','up','down','shape','height','width'].map(k => [k, $('map-' + k).value])); }
 function toast(message) { $('toast').textContent = message; $('toast').classList.add('visible'); clearTimeout(toast.timer); toast.timer = setTimeout(() => $('toast').classList.remove('visible'), 4000); }
 function populateFields() {
   const fields = [...new Set(features.flatMap(f => Object.keys(f.properties || {})))];
-  const patterns = { id: [/^name$/i,/^conduit$/i,/^id$/i,/link.*id/i], up: [/^inoffset$/i,/^us[_ ]?invert$/i,/up.*invert/i,/^inletelev$/i,/^z1$/i,/^us.*elev/i], down: [/^outoffset$/i,/^ds[_ ]?invert$/i,/down.*invert/i,/^outletelev$/i,/^z2$/i,/^ds.*elev/i], height: [/^geom1$/i,/diam/i,/height/i,/maxdepth/i], width: [/^geom2$/i,/width/i] };
-  for (const key of ['id','up','down','height','width']) {
+  const patterns = { id: [/^name$/i,/^conduit$/i,/^id$/i,/link.*id/i], up: [/^inoffset$/i,/^us[_ ]?invert$/i,/up.*invert/i,/^inletelev$/i,/^z1$/i,/^us.*elev/i], down: [/^outoffset$/i,/^ds[_ ]?invert$/i,/down.*invert/i,/^outletelev$/i,/^z2$/i,/^ds.*elev/i], height: [/^geom1$/i,/diam/i,/height/i,/maxdepth/i], width: [/^geom2$/i,/width/i], shape: [/^shape$/i,/^xsect.*$/i,/^geometry$/i,/^geomtype$/i,/^shapetype$/i] };
+  for (const key of ['id','up','down','shape','height','width']) {
     const select = $('map-' + key); select.disabled = false;
     select.innerHTML = `<option value="">Choose a field</option>` + fields.map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('');
-    const match = patterns[key]?.map(re => fields.find(f => re.test(f))).find(Boolean); if (match) select.value = match;
+    const match = patterns[key]?.map(re => fields.find(f => re.test(f))).find(Boolean) || (key === 'shape' ? fields.find(f => features.some(feature => pipeShape(feature.properties?.[f]))) : null); if (match) select.value = match;
   }
   $('field-count').textContent = `${fields.length} fields available`; $('analyze').disabled = false;
   $('file-title').textContent = layerName; $('file-subtitle').innerHTML = `${features.length.toLocaleString()} conduits · <u>replace layer</u>`; $('dropzone').classList.add('loaded');
   $('step2').classList.add('active'); updateGeometryFields();
 }
 function updateGeometryFields() {
-  const rectangular = $('shape').value === 'rectangular';
-  $('height-caption').textContent = rectangular ? 'Pipe height' : 'Pipe diameter';
+  const shapeField = $('map-shape').value;
+  const shapes = features.map(f => pipeShape(f.properties?.[shapeField]));
+  const circular = shapes.filter(s => s === 'circular').length;
+  const rectangular = shapes.filter(s => s === 'rectangular').length;
+  $('height-caption').textContent = rectangular ? (circular ? 'Pipe height / diameter' : 'Pipe height') : 'Pipe diameter';
   $('height-label').classList.toggle('full', !rectangular);
   $('width-label').hidden = !rectangular;
   $('map-width').disabled = !rectangular || !features.length;
+  $('geometry-info').textContent = shapeField
+    ? `${circular} circular · ${rectangular} box pipes${shapes.length - circular - rectangular ? ` · ${shapes.length - circular - rectangular} unsupported / blank` : ''}. Height applies to boxes; diameter to circular pipes. Width applies only to boxes.`
+    : 'CIRCULAR → circular · RECT_CLOSED → box pipe';
 }
 function clearReport() {
   crossings = []; pipes = []; overlaps = []; selected = null; analyzedSettings = null;
@@ -126,8 +133,8 @@ async function upload(files) {
 }
 function runAnalysis() {
   const m = mapping(), s = settings();
-  if (['id','up','down','height'].some(k => !m[k])) { toast(`Map the conduit ID, both elevations, and pipe ${s.shape === 'rectangular' ? 'height' : 'diameter'} before analyzing.`); return; }
-  if (s.shape === 'rectangular' && !m.width) { toast('Map the pipe width for rectangular conduits before analyzing.'); return; }
+  if (['id','up','down','shape','height'].some(k => !m[k])) { toast('Map the conduit ID, both elevations, geometry attribute, and pipe height / diameter before analyzing.'); return; }
+  if (features.some(f => pipeShape(f.properties?.[m.shape]) === 'rectangular') && !m.width) { toast('Map the pipe width for rectangular conduits before analyzing.'); return; }
   if ($('minimum').value === '' || $('wall').value === '' || !Number.isFinite(s.minimum) || s.minimum < 0 || !Number.isFinite(s.wall) || s.wall < 0) { toast('Enter a non-negative minimum clearance and wall thickness.'); return; }
   const prepared = makePipes(features, m, s);
   pipes = prepared.pipes;
@@ -163,14 +170,14 @@ function selectCrossing(id) {
 }
 function loadDemo() {
   features = demo; layerName = 'Sample network'; projection = 'Projected local metres';
-  $('xy-unit').value = $('z-unit').value = $('size-unit').value = 'm'; $('reference').value = 'invert'; $('shape').value = 'circular'; $('wall').value = '0'; $('minimum').value = '0.30'; $('reverse').checked = $('endpoints').checked = false;
+  $('xy-unit').value = $('z-unit').value = $('size-unit').value = 'm'; $('reference').value = 'invert'; $('wall').value = '0'; $('minimum').value = '0.30'; $('reverse').checked = $('endpoints').checked = false;
   clearReport(); populateFields(); runAnalysis();
 }
 $('demo').onclick = $('demo-viewer').onclick = loadDemo;
 $('file-input').onchange = e => upload(e.target.files);
 $('dropzone').onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('file-input').click(); } };
 for (const type of ['dragover','dragleave','drop']) $('dropzone').addEventListener(type, e => { e.preventDefault(); $('dropzone').classList.toggle('dragging', type === 'dragover'); if (type === 'drop') upload(e.dataTransfer.files); });
-$('shape').addEventListener('change', updateGeometryFields);
+$('map-shape').addEventListener('change', updateGeometryFields);
 $('analyze').onclick = runAnalysis;
 $('fit').onclick = () => viewer.fit(); $('top').onclick = () => viewer.top(); $('exaggeration').onchange = e => viewer.exaggerate(Number(e.target.value));
 $('search').oninput = renderTable;

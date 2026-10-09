@@ -19,8 +19,10 @@ test('downloaded HTML imports, analyzes, renders, and exports without a server o
   await expect(page.locator('#crossing-detail')).toContainText('vertical overlap');
   await page.locator('#top').click();
   await page.locator('#fit').click();
-  await page.locator('#file-input').setInputFiles({ name: 'network.zip', mimeType: 'application/zip', buffer: fixtureZip() });
+  await page.locator('#file-input').setInputFiles({ name: 'network.zip', mimeType: 'application/zip', buffer: fixtureZip(false, false, true) });
   await expect(page.locator('#map-up')).toHaveValue('US_Invert');
+  await expect(page.locator('#map-shape')).toHaveValue('SHAPE');
+  await expect(page.locator('#geometry-info')).toContainText('1 circular · 1 box pipes');
   await page.locator('#analyze').click();
   await expect(page.locator('#total')).toHaveText('1');
   await expect(page.locator('.clearance')).toHaveText('-0.500');

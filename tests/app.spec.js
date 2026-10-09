@@ -34,14 +34,17 @@ test('mobile layout fits viewport and supports sample analysis',async ({page})=>
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
  await page.screenshot({path:'/tmp/conduit-mobile.png',fullPage:true});
 });
-test('defaults to INOFFSET/OUTOFFSET and offers diameter or required box height/width', async ({page}) => {
+test('maps mixed pipe geometry and defaults to INOFFSET/OUTOFFSET', async ({page}) => {
  await page.goto('/');
- await page.locator('#file-input').setInputFiles({name:'offsets.zip',mimeType:'application/zip',buffer:fixtureZip(false,true)});
+ await page.locator('#file-input').setInputFiles({name:'mixed.zip',mimeType:'application/zip',buffer:fixtureZip(false,true,true)});
  await expect(page.locator('#map-up')).toHaveValue('INOFFSET');await expect(page.locator('#map-down')).toHaveValue('OUTOFFSET');
- await expect(page.locator('#height-caption')).toHaveText('Pipe diameter');await expect(page.locator('#map-width')).toBeHidden();await expect(page.locator('#map-width')).toBeDisabled();
- await page.locator('#shape').selectOption('rectangular');await expect(page.locator('#height-caption')).toHaveText('Pipe height');await expect(page.locator('#map-width')).toBeVisible();await expect(page.locator('#map-width')).toHaveValue('Geom2');
+ await expect(page.locator('#map-shape')).toHaveValue('SHAPE');await expect(page.locator('#geometry-info')).toContainText('1 circular · 1 box pipes');
+ await expect(page.locator('#height-caption')).toHaveText('Pipe height / diameter');await expect(page.locator('#map-width')).toBeVisible();await expect(page.locator('#map-width')).toHaveValue('Geom2');
  await page.locator('#map-width').selectOption('');await page.locator('#analyze').click();await expect(page.locator('#toast')).toContainText('Map the pipe width');await expect(page.locator('#total')).toHaveText('—');
  await page.locator('#map-width').selectOption('Geom2');await page.locator('#analyze').click();await expect(page.locator('#total')).toHaveText('1');await expect(page.locator('.clearance')).toHaveText('-0.500');
  await expect(page.locator('#issues')).toContainText('offsets above node inverts');
- await page.locator('#shape').selectOption('circular');await expect(page.locator('#export')).toBeDisabled();await expect(page.locator('#map-width')).toBeHidden();await page.locator('#analyze').click();await expect(page.locator('#total')).toHaveText('1');
+ await page.locator('#map-shape').selectOption('');await expect(page.locator('#export')).toBeDisabled();await page.locator('#analyze').click();await expect(page.locator('#toast')).toContainText('geometry attribute');
+ await page.locator('#file-input').setInputFiles({name:'circular.zip',mimeType:'application/zip',buffer:fixtureZip()});
+ await expect(page.locator('#height-caption')).toHaveText('Pipe diameter');await expect(page.locator('#map-width')).toBeHidden();await expect(page.locator('#map-width')).toBeDisabled();
+ await page.locator('#analyze').click();await expect(page.locator('#total')).toHaveText('1');
 });

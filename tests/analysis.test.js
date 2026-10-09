@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { makePipes, analyze, envelope, csv } from '../src/analysis.js';
-const feature = (id, points, up, down, height=1) => ({properties:{id,up,down,height},geometry:{type:'LineString',coordinates:points}});
-const mapping = {id:'id',up:'up',down:'down',height:'height'};
-const settings = {xyUnit:'m',zUnit:'m',sizeUnit:'m',wall:0,reference:'invert',shape:'circular'};
+const feature = (id, points, up, down, height=1) => ({properties:{id,up,down,height,shape:'CIRCULAR'},geometry:{type:'LineString',coordinates:points}});
+const mapping = {id:'id',up:'up',down:'down',height:'height',shape:'shape'};
+const settings = {xyUnit:'m',zUnit:'m',sizeUnit:'m',wall:0,reference:'invert',};
 const prepare = features => makePipes(features,mapping,settings).pipes;
 test('interpolates inverts by cumulative plan length and calculates signed clearance', () => {
  const pipes=prepare([feature('A',[[0,0],[10,0],[10,10]],10,8),feature('B',[[5,-5],[5,5]],12,12)]);
@@ -44,8 +44,21 @@ test('circular pipes ignore width attributes, rectangular pipes use separate wid
  const f=feature('A',[[0,0],[10,0]],0,0,1);f.properties.width=2.5;
  const m={...mapping,width:'width'};
  assert.equal(makePipes([f],m,settings).pipes[0].width,1);
- const box=makePipes([f],m,{...settings,shape:'rectangular'}).pipes[0];
+ f.properties.shape='RECT_CLOSED';
+ const box=makePipes([f],m,settings).pipes[0];
  assert.equal(box.height,1);assert.equal(box.width,2.5);assert.equal(box.shape,'rectangular');
- assert.equal(makePipes([f],mapping,{...settings,shape:'rectangular'}).errors.length,1);
- f.properties.width=0;assert.equal(makePipes([f],m,{...settings,shape:'rectangular'}).errors.length,1);
+ assert.equal(makePipes([f],mapping,settings).errors.length,1);
+ f.properties.width=0;assert.equal(makePipes([f],m,settings).errors.length,1);
+});
+test('mixed layer uses each feature shape and ignores circular zero width', () => {
+ const a=feature('Round',[[-5,0],[5,0]],0,0);a.properties.width=0;a.properties.shape=' circular ';
+ const b=feature('Box',[[0,-5],[0,5]],2,2);b.properties.width=3;b.properties.shape='RECT_CLOSED';
+ const result=makePipes([a,b],{...mapping,width:'width'},settings);
+ assert.equal(result.errors.length,0);assert.deepEqual(result.pipes.map(p=>[p.shape,p.width]),[['circular',1],['rectangular',3]]);
+ assert.equal(analyze(result.pipes).crossings[0].clearance,1);
+});
+test('unknown and missing shape values are explicitly excluded', () => {
+ const a=feature('Unknown',[[0,0],[5,0]],0,0);a.properties.shape='ELLIPTICAL';
+ const b=feature('Missing',[[0,0],[5,0]],0,0);b.properties.shape=null;
+ const result=makePipes([a,b],mapping,settings);assert.equal(result.pipes.length,0);assert.equal(result.errors.length,2);assert.match(result.errors[0],/ELLIPTICAL/);assert.match(result.errors[1],/blank/);
 });
