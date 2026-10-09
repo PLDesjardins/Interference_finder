@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { envelope } from './analysis.js';
+import { navigationOffset } from './navigation.js';
 const colors = { clear: 0x4bc7a1, review: 0xffc06b, clash: 0xff697d };
 export function createViewer(container, onSelect) {
   let renderer;
@@ -9,7 +10,21 @@ export function createViewer(container, onSelect) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setClearColor(0x101d30);
   container.append(renderer.domElement);
-  renderer.domElement.setAttribute('aria-label', 'Interactive 3D conduit network. Drag to orbit, scroll to zoom, right drag to pan.');
+  renderer.domElement.tabIndex = 0;
+  renderer.domElement.setAttribute('aria-label', 'Interactive 3D conduit network. Click to activate keyboard movement: W up, S down, A left, D right, Q forward, E backward. Drag to orbit, scroll to zoom, right drag to pan.');
+  const pressedKeys = new Set(), movementKeys = new Set(['w', 'a', 's', 'd', 'q', 'e']);
+  renderer.domElement.addEventListener('keydown', event => {
+    const key = event.key.toLowerCase();
+    if (!movementKeys.has(key) || event.ctrlKey || event.metaKey || event.altKey) return;
+    event.preventDefault(); pressedKeys.add(key);
+  });
+  renderer.domElement.addEventListener('keyup', event => {
+    const key = event.key.toLowerCase();
+    if (movementKeys.has(key)) { event.preventDefault(); pressedKeys.delete(key); }
+  });
+  renderer.domElement.addEventListener('blur', () => pressedKeys.clear());
+  window.addEventListener('blur', () => pressedKeys.clear());
+  document.addEventListener('visibilitychange', () => { if (document.hidden) pressedKeys.clear(); });
   const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(42, 1, .01, 100000);
   const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true;
   scene.add(new THREE.AmbientLight(0xffffff, 2));
@@ -68,13 +83,23 @@ export function createViewer(container, onSelect) {
   }
   const observer = new ResizeObserver(() => { const { width, height } = container.getBoundingClientRect(); renderer.setSize(width, height); camera.aspect = width / Math.max(1, height); camera.updateProjectionMatrix(); }); observer.observe(container);
   const raycaster = new THREE.Raycaster(), mouse = new THREE.Vector2(); let pointerDown;
-  renderer.domElement.addEventListener('pointerdown', e => { pointerDown = [e.clientX, e.clientY]; });
+  renderer.domElement.addEventListener('pointerdown', e => { renderer.domElement.focus({ preventScroll: true }); pointerDown = [e.clientX, e.clientY]; });
   renderer.domElement.addEventListener('pointerup', e => {
     if (!markersVisible || !pointerDown || Math.hypot(e.clientX - pointerDown[0], e.clientY - pointerDown[1]) > 5) return;
     const rect = renderer.domElement.getBoundingClientRect(); mouse.set((e.clientX - rect.left) / rect.width * 2 - 1, -(e.clientY - rect.top) / rect.height * 2 + 1);
     raycaster.setFromCamera(mouse, camera); const hit = raycaster.intersectObjects(markers)[0]; if (hit) onSelect(hit.object.userData.id);
   });
-  renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+  let lastFrame;
+  renderer.setAnimationLoop(time => {
+    const elapsed = lastFrame === undefined ? 0 : Math.min(Math.max((time - lastFrame) / 1000, 0), .05);
+    lastFrame = time;
+    if (document.activeElement === renderer.domElement && pipes.length && pressedKeys.size) {
+      const speed = Math.max(.2, Math.min(extent * .18, camera.position.distanceTo(controls.target) * .35));
+      const offset = navigationOffset(pressedKeys, camera.quaternion, speed * elapsed);
+      camera.position.add(offset); controls.target.add(offset);
+    }
+    controls.update(); renderer.render(scene, camera);
+  });
   return {
     update(nextPipes, nextCrossings) {
       pipes = nextPipes; crossings = nextCrossings; selection = undefined;

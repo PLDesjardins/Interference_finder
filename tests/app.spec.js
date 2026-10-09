@@ -48,3 +48,15 @@ test('maps mixed pipe geometry and defaults to INOFFSET/OUTOFFSET', async ({page
  await expect(page.locator('#height-caption')).toHaveText('Pipe diameter');await expect(page.locator('#map-width')).toBeHidden();await expect(page.locator('#map-width')).toBeDisabled();
  await page.locator('#analyze').click();await expect(page.locator('#total')).toHaveText('1');
 });
+test('clicking the viewer enables held-key movement and fields keep normal typing', async ({page}) => {
+ await page.goto('/');await page.locator('#demo').click();await page.locator('#show-markers').uncheck();
+ const canvas=page.locator('#viewer canvas');await canvas.click({position:{x:10,y:100}});await expect(canvas).toBeFocused();
+ await page.keyboard.press('Shift');
+ const before=await canvas.screenshot();
+ await page.keyboard.down('q');await page.waitForTimeout(300);await page.keyboard.up('q');
+ expect((await canvas.screenshot()).equals(before)).toBe(false);
+ await expect(page.locator('#total')).toHaveText('8');
+ await page.keyboard.down('w');await page.locator('#search').focus();await page.keyboard.up('w');
+ await page.locator('#search').pressSequentially('wasdqe');await expect(page.locator('#search')).toHaveValue('wasdqe');await expect(canvas).not.toBeFocused();
+ await page.locator('#search').fill('');await page.locator('#fit').click();await expect(page.locator('#results tr')).toHaveCount(8);
+});
