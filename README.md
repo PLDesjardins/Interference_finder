@@ -28,8 +28,8 @@ Open the address printed by Vite in your browser. For deployment, run `npm run b
 ## Use
 
 1. Choose **Explore sample network** to try the app, or import one conduit layer as a ZIP containing matching `.shp` and `.dbf` files. You can also select the files together. Include `.prj` and `.cpg` when available. Input limit: 100 MB.
-2. Map the conduit ID, upstream invert, downstream invert, and pipe height/diameter fields. Common `Name`, `US_Invert`, `DS_Invert`, and `Geom1` fields are automatically suggested. **Confirm the suggestions against your export**. A width field is optional for elliptical or rectangular sections.
-3. Set minimum clearance and run **Analyze crossings**. Metres and invert elevations are the defaults. Advanced controls support feet, millimetre sizes, centerline elevations, wall thickness, rectangular sections, reversed geometry, and endpoint crossings.
+2. Map the conduit ID, upstream invert, downstream invert, and pipe height/diameter fields. The elevation mappings default to `INOFFSET` and `OUTOFFSET` when present; `US_Invert` and `DS_Invert` remain fallbacks. `Name`, `Geom1`, and `Geom2` are suggested for ID, height/diameter, and width. **Confirm the suggestions against your export**. Select Circular for a diameter, or Rectangular (box pipe) for separate required height and width fields. Circular pipes always use diameter for both dimensions and ignore the width mapping.
+3. Set minimum clearance and run **Analyze crossings**. Metres and invert elevations are the defaults. Advanced controls support feet, millimetre sizes, centerline elevations, wall thickness, reversed geometry, and endpoint crossings. Pipe geometry is selected in the main attribute-mapping panel.
 4. Filter or search the report, select a crossing to focus the 3D camera, and export the complete report to CSV. Drag to orbit, scroll to zoom, and right-drag to pan. Top view, fit network, and vertical exaggeration controls are available. Changing engineering parameters invalidates the report until reanalysis.
 
 ## Calculation and assumptions
@@ -42,7 +42,7 @@ Open the address printed by Vite in your browser. For deployment, run `npm run b
 - Geometry uses constant vertical heights and widths, including on sloping pipes. This is a vertical-envelope check at centerline crossings, not a full solid-intersection analysis. The 3D display uses the same envelope convention. Vertical exaggeration affects display only.
 - Endpoints are excluded by default to avoid flagging intended node connections; this can be changed. Crossings at intermediate polyline vertices are deduplicated. Collinear overlaps are flagged separately and not represented as point crossings. Near misses, parallel body collisions, self-intersections, and curved or variable-section solid geometry are outside the analysis.
 - Only continuous LineString conduits with finite elevations and positive dimensions are analyzed. Invalid features and multipart geometry are reported as excluded. Dimensions should describe internal size when adding wall thickness; use zero wall thickness when input sizes already describe the outside envelope.
-- The export must contain **actual endpoint elevations**. SWMM node IDs and inlet/outlet offsets alone are insufficient; prepare actual invert fields before import. No node-elevation lookup or terrain interpolation is performed.
+- The export must contain **actual endpoint elevations**. SWMM node IDs and inlet/outlet offsets alone are insufficient; prepare actual invert fields before import. `INOFFSET` and `OUTOFFSET` are treated as actual endpoint elevations by this app, not automatically added to node inverts. If they contain SWMM offsets, add the corresponding node elevations before analyzing. No node-elevation lookup or terrain interpolation is performed.
 - The sample network is synthetic. It has eight crossings: one clash, two low-clearance crossings, and five clear crossings at the default 0.30 m minimum.
 
 ## Validate
@@ -54,7 +54,7 @@ npm run build:standalone
 npm run test:browser
 ```
 
-The nine calculation tests exercise interpolation, signed clearance, thresholds, deduplication, endpoints, overlaps, invalid values, unit conversion, wall thickness, reversed geometry, and CSV encoding. Browser tests import generated standards-compliant SHP/DBF fixtures (zipped and loose), check expected clash results, reject geographic coordinates and missing attributes, exercise the demo/filter/focus/export/reanalysis flow, and check mobile layout.
+The ten calculation tests exercise interpolation, signed clearance, thresholds, deduplication, endpoints, overlaps, invalid values, unit conversion, wall thickness, reversed geometry, CSV encoding, and circular versus rectangular dimensions. Browser tests import generated standards-compliant SHP/DBF fixtures (zipped and loose), check expected clash results, reject geographic coordinates and missing attributes, exercise the demo/filter/focus/export/reanalysis flow, and check mobile layout.
 
 Browser tests use `/usr/bin/chromium` when installed, otherwise Playwright's Chromium. Install the latter with `npx playwright install chromium` if needed. The 3D viewer requires WebGL; report calculations and CSV export remain usable when WebGL is unavailable.
 

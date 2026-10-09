@@ -50,15 +50,15 @@ document.querySelector('#app').innerHTML = `
         <label class="full">Conduit ID<select id="map-id" disabled><option>Choose a field</option></select></label>
         <label>Upstream invert<select id="map-up" disabled><option>Choose a field</option></select></label>
         <label>Downstream invert<select id="map-down" disabled><option>Choose a field</option></select></label>
-        <label>Pipe height / diameter<select id="map-height" disabled><option>Choose a field</option></select></label>
-        <label>Pipe width <span class="optional">optional</span><select id="map-width" disabled><option value="">Same as height</option></select></label>
+        <label class="full">Pipe geometry<select id="shape"><option value="circular">Circular</option><option value="rectangular">Rectangular (box pipe)</option></select></label>
+        <label id="height-label" class="full"><span id="height-caption">Pipe diameter</span><select id="map-height" disabled><option>Choose a field</option></select></label>
+        <label id="width-label" hidden>Pipe width<select id="map-width" disabled><option value="">Choose a field</option></select></label>
       </div>
       <details class="advanced"><summary>Geometry & units <span>Metres · inverts</span></summary><div class="form-grid">
         <label>XY units<select id="xy-unit"><option value="m">Metres</option><option value="ft">Feet</option></select></label>
         <label>Elevation units<select id="z-unit"><option value="m">Metres</option><option value="ft">Feet</option></select></label>
         <label>Pipe size units<select id="size-unit"><option value="m">Metres</option><option value="mm">Millimetres</option><option value="ft">Feet</option></select></label>
         <label>Elevation reference<select id="reference"><option value="invert">Invert (inside bottom)</option><option value="center">Centerline</option></select></label>
-        <label>Cross section<select id="shape"><option value="circular">Circular / elliptical</option><option value="rectangular">Rectangular</option></select></label>
         <label>Wall thickness (m)<input id="wall" type="number" min="0" step="0.001" value="0"></label>
         <label class="checkbox full"><input id="reverse" type="checkbox"> Geometry runs downstream → upstream</label>
         <label class="checkbox full"><input id="endpoints" type="checkbox"> Include conduit endpoint crossings</label>
@@ -90,15 +90,22 @@ function mapping() { return Object.fromEntries(['id','up','down','height','width
 function toast(message) { $('toast').textContent = message; $('toast').classList.add('visible'); clearTimeout(toast.timer); toast.timer = setTimeout(() => $('toast').classList.remove('visible'), 4000); }
 function populateFields() {
   const fields = [...new Set(features.flatMap(f => Object.keys(f.properties || {})))];
-  const patterns = { id: [/^name$/i,/^conduit$/i,/^id$/i,/link.*id/i], up: [/^us[_ ]?invert$/i,/up.*invert/i,/^inletelev$/i,/^z1$/i,/^us.*elev/i], down: [/^ds[_ ]?invert$/i,/down.*invert/i,/^outletelev$/i,/^z2$/i,/^ds.*elev/i], height: [/^geom1$/i,/diam/i,/height/i,/maxdepth/i] };
+  const patterns = { id: [/^name$/i,/^conduit$/i,/^id$/i,/link.*id/i], up: [/^inoffset$/i,/^us[_ ]?invert$/i,/up.*invert/i,/^inletelev$/i,/^z1$/i,/^us.*elev/i], down: [/^outoffset$/i,/^ds[_ ]?invert$/i,/down.*invert/i,/^outletelev$/i,/^z2$/i,/^ds.*elev/i], height: [/^geom1$/i,/diam/i,/height/i,/maxdepth/i], width: [/^geom2$/i,/width/i] };
   for (const key of ['id','up','down','height','width']) {
     const select = $('map-' + key); select.disabled = false;
-    select.innerHTML = `<option value="">${key === 'width' ? 'Same as height' : 'Choose a field'}</option>` + fields.map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('');
+    select.innerHTML = `<option value="">Choose a field</option>` + fields.map(f => `<option value="${esc(f)}">${esc(f)}</option>`).join('');
     const match = patterns[key]?.map(re => fields.find(f => re.test(f))).find(Boolean); if (match) select.value = match;
   }
   $('field-count').textContent = `${fields.length} fields available`; $('analyze').disabled = false;
   $('file-title').textContent = layerName; $('file-subtitle').innerHTML = `${features.length.toLocaleString()} conduits · <u>replace layer</u>`; $('dropzone').classList.add('loaded');
-  $('step2').classList.add('active');
+  $('step2').classList.add('active'); updateGeometryFields();
+}
+function updateGeometryFields() {
+  const rectangular = $('shape').value === 'rectangular';
+  $('height-caption').textContent = rectangular ? 'Pipe height' : 'Pipe diameter';
+  $('height-label').classList.toggle('full', !rectangular);
+  $('width-label').hidden = !rectangular;
+  $('map-width').disabled = !rectangular || !features.length;
 }
 function clearReport() {
   crossings = []; pipes = []; overlaps = []; selected = null; analyzedSettings = null;
@@ -119,7 +126,8 @@ async function upload(files) {
 }
 function runAnalysis() {
   const m = mapping(), s = settings();
-  if (['id','up','down','height'].some(k => !m[k])) { toast('Map the conduit ID, both elevations, and pipe height before analyzing.'); return; }
+  if (['id','up','down','height'].some(k => !m[k])) { toast(`Map the conduit ID, both elevations, and pipe ${s.shape === 'rectangular' ? 'height' : 'diameter'} before analyzing.`); return; }
+  if (s.shape === 'rectangular' && !m.width) { toast('Map the pipe width for rectangular conduits before analyzing.'); return; }
   if ($('minimum').value === '' || $('wall').value === '' || !Number.isFinite(s.minimum) || s.minimum < 0 || !Number.isFinite(s.wall) || s.wall < 0) { toast('Enter a non-negative minimum clearance and wall thickness.'); return; }
   const prepared = makePipes(features, m, s);
   pipes = prepared.pipes;
@@ -133,6 +141,7 @@ function runAnalysis() {
   const notes = [];
   if (prepared.errors.length) notes.push(`<strong>${prepared.errors.length} conduit(s) excluded</strong><ul>${prepared.errors.slice(0, 15).map(e => `<li>${esc(e)}</li>`).join('')}</ul>${prepared.errors.length > 15 ? 'Additional invalid conduits omitted from this list.' : ''}`);
   if (overlaps.length) notes.push(`<strong>${overlaps.length} collinear pair(s) need separate review</strong><p>${overlaps.slice(0, 10).map(o => `${esc(o.a)} / ${esc(o.b)}`).join(', ')}. Continuous overlaps are not included in the point-crossing report.</p>`);
+  if (/^(INOFFSET|OUTOFFSET)$/i.test(m.up) || /^(INOFFSET|OUTOFFSET)$/i.test(m.down)) notes.push('<p>Selected offset fields are treated as actual endpoint elevations. If they are offsets above node inverts, add the node elevations first; offsets alone do not give absolute pipe elevations.</p>');
   notes.push(`<p>Uses linear invert interpolation along plan length and a constant vertical pipe height. ${s.endpoints ? 'Endpoint crossings included.' : 'Crossings at conduit endpoints excluded.'} Near misses, self-intersections, and lateral pipe-body collisions are not checked.</p>`);
   $('issues').innerHTML = notes.join(''); renderTable(); toast(`${crossings.length} crossings analyzed${prepared.errors.length ? ` · ${prepared.errors.length} invalid conduits excluded` : ''}.`);
 }
@@ -161,6 +170,7 @@ $('demo').onclick = $('demo-viewer').onclick = loadDemo;
 $('file-input').onchange = e => upload(e.target.files);
 $('dropzone').onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('file-input').click(); } };
 for (const type of ['dragover','dragleave','drop']) $('dropzone').addEventListener(type, e => { e.preventDefault(); $('dropzone').classList.toggle('dragging', type === 'dragover'); if (type === 'drop') upload(e.dataTransfer.files); });
+$('shape').addEventListener('change', updateGeometryFields);
 $('analyze').onclick = runAnalysis;
 $('fit').onclick = () => viewer.fit(); $('top').onclick = () => viewer.top(); $('exaggeration').onchange = e => viewer.exaggerate(Number(e.target.value));
 $('search').oninput = renderTable;

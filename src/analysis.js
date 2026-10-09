@@ -11,7 +11,7 @@ export function makePipes(features, mapping, settings) {
     if (settings.reverse) points.reverse();
     const up = number(p[mapping.up]) * units[settings.zUnit], down = number(p[mapping.down]) * units[settings.zUnit];
     const height = number(p[mapping.height]) * units[settings.sizeUnit];
-    const width = mapping.width ? number(p[mapping.width]) * units[settings.sizeUnit] : height;
+    const width = settings.shape === 'rectangular' ? number(p[mapping.width]) * units[settings.sizeUnit] : height;
     if (!Number.isFinite(up) || !Number.isFinite(down) || !Number.isFinite(height) || height <= 0 || !Number.isFinite(width) || width <= 0 || points.some(c => !c.every(Number.isFinite))) {
       errors.push(`${label}: missing or invalid elevation, size, or coordinates.`); return;
     }

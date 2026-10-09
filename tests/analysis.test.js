@@ -40,3 +40,12 @@ test('reverse option associates upstream invert with final geometry coordinate',
 test('CSV preserves quotes and reports coordinates in original XY units', () => {
  const result=analyze(prepare([feature('A"1',[[-5,0],[5,0]],0,0),feature('B',[[0,-5],[0,5]],2,2)])); assert.match(csv(result.crossings,'ft'),/A""1/); assert.match(csv(result.crossings,'ft'),/X \(ft\)/);
 });
+test('circular pipes ignore width attributes, rectangular pipes use separate width', () => {
+ const f=feature('A',[[0,0],[10,0]],0,0,1);f.properties.width=2.5;
+ const m={...mapping,width:'width'};
+ assert.equal(makePipes([f],m,settings).pipes[0].width,1);
+ const box=makePipes([f],m,{...settings,shape:'rectangular'}).pipes[0];
+ assert.equal(box.height,1);assert.equal(box.width,2.5);assert.equal(box.shape,'rectangular');
+ assert.equal(makePipes([f],mapping,{...settings,shape:'rectangular'}).errors.length,1);
+ f.properties.width=0;assert.equal(makePipes([f],m,{...settings,shape:'rectangular'}).errors.length,1);
+});
