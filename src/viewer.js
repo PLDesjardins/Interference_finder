@@ -5,7 +5,7 @@ const colors = { clear: 0x4bc7a1, review: 0xffc06b, clash: 0xff697d };
 export function createViewer(container, onSelect) {
   let renderer;
   try { renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false }); }
-  catch { container.innerHTML = '<div class="webgl-error">3D needs a browser with WebGL enabled. Crossing analysis and CSV export remain available.</div>'; return { update() {}, fit() {}, top() {}, focus() {}, exaggerate() {} }; }
+  catch { container.innerHTML = '<div class="webgl-error">3D needs a browser with WebGL enabled. Crossing analysis and CSV export remain available.</div>'; return { update() {}, fit() {}, top() {}, focus() {}, exaggerate() {}, showMarkers() {} }; }
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setClearColor(0x101d30);
   container.append(renderer.domElement);
@@ -14,7 +14,7 @@ export function createViewer(container, onSelect) {
   const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true;
   scene.add(new THREE.AmbientLight(0xffffff, 2));
   const light = new THREE.DirectionalLight(0xdceeff, 3); light.position.set(40, 100, 60); scene.add(light);
-  let group = new THREE.Group(); scene.add(group);
+  let group = new THREE.Group(), crossingOverlays = new THREE.Group(), markersVisible = true; scene.add(group);
   let origin = [0, 0], base = 0, extent = 100, spanX = 100, spanY = 100, minZ = 0, maxZ = 0, exaggeration = 1, pipes = [], crossings = [], markers = [], selection;
   function disposeGroup() {
     group.traverse(o => { o.geometry?.dispose(); if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose()); });
@@ -43,13 +43,14 @@ export function createViewer(container, onSelect) {
         group.add(mesh);
       }
     }
+    crossingOverlays = new THREE.Group(); crossingOverlays.visible = markersVisible; group.add(crossingOverlays);
     for (const c of crossings) {
       const z = (Math.max(c.ea.top, c.eb.top) + Math.min(c.ea.bottom, c.eb.bottom)) / 2;
-      const marker = new THREE.Mesh(new THREE.SphereGeometry(Math.max(extent * .008, .5), 16, 12), new THREE.MeshBasicMaterial({ color: colors[c.status], transparent: true, opacity: .95, depthTest: false }));
-      marker.position.copy(position(c.point, z)); marker.userData.id = c.id; marker.renderOrder = 5; group.add(marker); markers.push(marker);
+      const marker = new THREE.Mesh(new THREE.SphereGeometry(Math.max(extent * .008, .5), 16, 12), new THREE.MeshBasicMaterial({ color: colors[c.status], transparent: true, opacity: .3, depthTest: false, depthWrite: false }));
+      marker.position.copy(position(c.point, z)); marker.userData.id = c.id; marker.renderOrder = 5; crossingOverlays.add(marker); markers.push(marker);
       if (selection === c.id) {
         const ring = new THREE.Mesh(new THREE.TorusGeometry(extent * .018, extent * .002, 8, 40), new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false }));
-        ring.position.copy(marker.position); ring.rotation.x = Math.PI / 2; ring.renderOrder = 6; group.add(ring);
+        ring.position.copy(marker.position); ring.rotation.x = Math.PI / 2; ring.renderOrder = 6; crossingOverlays.add(ring);
       }
     }
   }
@@ -69,7 +70,7 @@ export function createViewer(container, onSelect) {
   const raycaster = new THREE.Raycaster(), mouse = new THREE.Vector2(); let pointerDown;
   renderer.domElement.addEventListener('pointerdown', e => { pointerDown = [e.clientX, e.clientY]; });
   renderer.domElement.addEventListener('pointerup', e => {
-    if (!pointerDown || Math.hypot(e.clientX - pointerDown[0], e.clientY - pointerDown[1]) > 5) return;
+    if (!markersVisible || !pointerDown || Math.hypot(e.clientX - pointerDown[0], e.clientY - pointerDown[1]) > 5) return;
     const rect = renderer.domElement.getBoundingClientRect(); mouse.set((e.clientX - rect.left) / rect.width * 2 - 1, -(e.clientY - rect.top) / rect.height * 2 + 1);
     raycaster.setFromCamera(mouse, camera); const hit = raycaster.intersectObjects(markers)[0]; if (hit) onSelect(hit.object.userData.id);
   });
@@ -97,6 +98,7 @@ export function createViewer(container, onSelect) {
       const target = position(c.point, (c.ea.center + c.eb.center) / 2), offset = camera.position.clone().sub(controls.target).normalize().multiplyScalar(Math.max(extent * .22, 8));
       controls.target.copy(target); camera.position.copy(target.clone().add(offset)); controls.update();
     },
+    showMarkers(visible) { markersVisible = Boolean(visible); crossingOverlays.visible = markersVisible; },
     exaggerate(value) { exaggeration = value; draw(); }
   };
 }

@@ -14,6 +14,15 @@ test('downloaded HTML imports, analyzes, renders, and exports without a server o
   await expect(page.locator('#total')).toHaveText('8');
   await expect(page.locator('#viewer canvas')).toBeVisible();
   await expect(page.locator('.webgl-error')).toHaveCount(0);
+  const settle = () => page.evaluate(async () => { for (let i = 0; i < 8; i++) await new Promise(requestAnimationFrame); });
+  await settle();
+  const withMarkers = await page.locator('#viewer canvas').screenshot();
+  await page.locator('#show-markers').uncheck(); await settle();
+  const withoutMarkers = await page.locator('#viewer canvas').screenshot();
+  expect(withoutMarkers.equals(withMarkers)).toBe(false);
+  await page.locator('#show-markers').check(); await settle();
+  expect((await page.locator('#viewer canvas').screenshot()).equals(withoutMarkers)).toBe(false);
+  await page.locator('#show-markers').uncheck();
   await page.locator('[data-filter="clash"]').click();
   await page.locator('.inspect').click();
   await expect(page.locator('#crossing-detail')).toContainText('vertical overlap');
@@ -25,6 +34,8 @@ test('downloaded HTML imports, analyzes, renders, and exports without a server o
   await expect(page.locator('#geometry-info')).toContainText('1 circular · 1 box pipes');
   await page.locator('#analyze').click();
   await expect(page.locator('#total')).toHaveText('1');
+  await expect(page.locator('#show-markers')).not.toBeChecked();
+  await page.locator('#show-markers').check();
   await expect(page.locator('.clearance')).toHaveText('-0.500');
   const downloadPromise = page.waitForEvent('download');
   await page.locator('#export').click();
